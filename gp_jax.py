@@ -2,10 +2,10 @@
 #  for a harmonic oscillator using JAX
 #
 #  Equation:
-#      [ -1/2 d^2/dx^2 + V(x) + g|psi|^2 ] psi = i d(psi)/dt
+#      i d(psi)/dt = [ -1/2 d^2/dx^2 + V(x) + g|psi|^2 ]
 #      (in natutal units)
 #
-#  Split-step Fourier Method (Strang splitting)
+#  Split-step Fourier method (with Strang splitting)
 
 
 import jax
@@ -38,18 +38,24 @@ def harmonic_potential(x: Array) -> Array:
 
 # Wavefunction norm
 def norm_wf(psi: Array, dx: float) -> Array:
-    return jnp.sum(jnp.abs(psi) ** 2) * dx
+    return jnp.sum(psi.real**2 + psi.imag**2) * dx
 
 
 # Energy functional
-def energy_func(psi: Array, k: Array, V: Array, g: float, dx: float) -> Array:
+def energy_func(
+    psi: Array, k: Array, V: Array, g: float, dx: float, grid_scale: float
+) -> Array:
     """
     E = integral[ 1/2|d(psi)/dx|^2 + V|psi|^2 + g/2|psi|^4 ] dx
     """
-    dpsi_dx = jnp.fft.ifft(1j * k * jnp.fft.fft(psi))
-    e_kin = 0.5 * jnp.sum(jnp.abs(dpsi_dx) ** 2) * dx
-    e_pot = jnp.sum(V * jnp.abs(psi) ** 2) * dx
-    e_int = 0.5 * g * jnp.sum(jnp.abs(psi) ** 4) * dx
+    psi_sq = psi.real**2 + psi.imag**2
+
+    psi_k = jnp.fft.fft(psi)
+    psi_k_sq = psi_k.real**2 + psi_k.imag**2
+    e_kin = 0.5 * jnp.sum(k**2 * psi_k_sq) * grid_scale
+
+    e_pot = jnp.sum(V * psi_sq) * dx
+    e_int = 0.5 * g * jnp.sum(psi_sq**2) * dx
     return e_kin + e_pot + e_int
 
 
@@ -61,23 +67,30 @@ def imaginary_time_evolution(
     V: Array,
     g: float,
     dx: float,
-    N_particles: int,
+    N_particles: float,
     dtau: float,
     N_steps: int,
 ) -> tuple[Array, Array]:
-    k2 = k**2
+
+    minus_half_dtau = -0.5 * dtau
+    kinetic_factor = jnp.exp(minus_half_dtau * k**2)
+
+    grid_scale = dx / k.shape[0]
+
     psi0 = psi0 * jnp.sqrt(N_particles / norm_wf(psi0, dx))
 
     def step(psi: Array, _) -> tuple[Array, Array]:
-        v_nl = V + g * jnp.abs(psi) ** 2
-        psi = psi * jnp.exp(-0.5 * dtau * v_nl)
-        psi = jnp.fft.ifft(jnp.fft.fft(psi) * jnp.exp(-0.5 * dtau * k2))
-        v_nl = V + g * jnp.abs(psi) ** 2
-        psi = psi * jnp.exp(-0.5 * dtau * v_nl)
-        psi = psi * jnp.sqrt(
-            N_particles / norm_wf(psi, dx)
-        )  # imaginary time is not norm-preserving
-        E = energy_func(psi, k, V, g, dx)
+        v_nl = V + g * (psi.real**2 + psi.imag**2)
+        psi = psi * jnp.exp(minus_half_dtau * v_nl)
+
+        psi = jnp.fft.ifft(jnp.fft.fft(psi) * kinetic_factor)
+
+        v_nl = V + g * (psi.real**2 + psi.imag**2)
+        psi = psi * jnp.exp(minus_half_dtau * v_nl)
+
+        psi = psi * jnp.sqrt(N_particles / norm_wf(psi, dx))
+
+        E = energy_func(psi, k, V, g, dx, grid_scale)
         return psi, E
 
     psi_final, energy_history = lax.scan(step, psi0, None, length=N_steps)
@@ -86,7 +99,7 @@ def imaginary_time_evolution(
 
 # Main function
 def main() -> None:
-    N = 1024  # grid points
+    N = 2048  # grid points
     L = 20.0  # box length
     g = 5.0  # interaction strength (>0 repulsive, <0 attractive)
     N_particles = 10
@@ -110,16 +123,16 @@ def main() -> None:
     print(f"norm = {float(norm_wf(psi_ground, dx)):.10f}")
 
     # validation: g=0 case has an exact analytic ground state
-    psi0_lin, E_history = imaginary_time_evolution(
+    psi0, E_history = imaginary_time_evolution(
         psi_guess, k, V, 0.0, dx, N_particles, dtau, N_steps
     )
     analytic_gaussian = (
         jnp.sqrt(N_particles) * (1 / jnp.pi**0.25) * jnp.exp(-(x**2) / 2)
     )
-    lin_error = float(jnp.max(jnp.abs(jnp.abs(psi0_lin) - analytic_gaussian)))
+    error = float(jnp.max(jnp.abs(jnp.abs(psi0) - analytic_gaussian)))
     print(f"[validation]")
     print(f"energy = {float(E_history[-1]):.6f}")
-    print(f"max|psi_numeric - psi_analytic| for g=0: {lin_error:.2e}")
+    print(f"max|psi_numeric - psi_analytic| for g=0: {error:.2e}")
 
 
 if __name__ == "__main__":
