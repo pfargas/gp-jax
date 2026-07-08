@@ -54,7 +54,7 @@ def energy_func(psi: Array, k: Array, V: Array, g: float, dx: float) -> Array:
 
 
 # Imaginary time evolution
-@partial(jax.jit, static_argnames=("N_steps"))
+@partial(jax.jit, static_argnames=("N_steps",))
 def imaginary_time_evolution(
     psi0: Array,
     k: Array,
@@ -89,33 +89,37 @@ def main() -> None:
     N = 1024  # grid points
     L = 20.0  # box length
     g = 5.0  # interaction strength (>0 repulsive, <0 attractive)
-    N_particles = 1.0
+    N_particles = 10
 
     x, k, dx = make_grid(N, L)
     V = harmonic_potential(x)
 
-    dtau = 1e-3
-    N_steps = 10_000
+    dtau = 5e-4
+    N_steps = 20_000
 
     psi_guess = jnp.exp(-(x**2) / 2).astype(jnp.complex128)
 
     psi_ground, E_history = imaginary_time_evolution(
         psi_guess, k, V, g, dx, N_particles, dtau, N_steps
     )
-    print(f"[ground state] energy = {float(E_history[-1]):.6f}")
-    print(f"               |dE| over last 1000 steps = {float(abs(E_history[-1]-E_history[-1000])):.2e}")
-    print(f"               norm = {float(norm_wf(psi_ground, dx)):.10f}")
-    
+    print(f"[ground state]")
+    print(f"energy = {float(E_history[-1]):.6f}")
+    print(
+        f"|dE| over last 1000 steps = {float(abs(E_history[-1]-E_history[-1000])):.2e}"
+    )
+    print(f"norm = {float(norm_wf(psi_ground, dx)):.10f}")
 
     # validation: g=0 case has an exact analytic ground state
     psi0_lin, E_history = imaginary_time_evolution(
         psi_guess, k, V, 0.0, dx, N_particles, dtau, N_steps
     )
-    analytic_gaussian = (1 / jnp.pi**0.25) * jnp.exp(-(x**2) / 2)
+    analytic_gaussian = (
+        jnp.sqrt(N_particles) * (1 / jnp.pi**0.25) * jnp.exp(-(x**2) / 2)
+    )
     lin_error = float(jnp.max(jnp.abs(jnp.abs(psi0_lin) - analytic_gaussian)))
-    print()
-    print(f"[validation]  max|psi_numeric - psi_analytic| for g=0: {lin_error:.2e}")
-    print(f"              energy = {float(E_history[-1]):.6f}")
+    print(f"[validation]")
+    print(f"energy = {float(E_history[-1]):.6f}")
+    print(f"max|psi_numeric - psi_analytic| for g=0: {lin_error:.2e}")
 
 
 if __name__ == "__main__":
