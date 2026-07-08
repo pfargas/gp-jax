@@ -18,6 +18,9 @@ from jax import Array
 
 from functools import partial
 
+import numpy as np
+import matplotlib.pyplot as plt
+
 
 # Grid
 def make_grid(N: int, L: float) -> tuple[Array, Array, float]:
@@ -67,7 +70,7 @@ def imaginary_time_evolution(
     V: Array,
     g: float,
     dx: float,
-    N_particles: float,
+    N_particles: int,
     dtau: float,
     N_steps: int,
 ) -> tuple[Array, Array]:
@@ -110,29 +113,50 @@ def main() -> None:
     dtau = 5e-4
     N_steps = 20_000
 
-    psi_guess = jnp.exp(-(x**2) / 2).astype(jnp.complex128)
+    psi_trial = jnp.exp(-(x**2) / 2).astype(jnp.complex128)
 
     psi_ground, E_history = imaginary_time_evolution(
-        psi_guess, k, V, g, dx, N_particles, dtau, N_steps
+        psi_trial, k, V, g, dx, N_particles, dtau, N_steps
     )
     print(f"[ground state]")
     print(f"energy = {float(E_history[-1]):.6f}")
     print(
         f"|dE| over last 1000 steps = {float(abs(E_history[-1]-E_history[-1000])):.2e}"
     )
-    print(f"norm = {float(norm_wf(psi_ground, dx)):.10f}")
+    print(f"norm = {float(norm_wf(psi_ground, dx)):.6f}")
 
-    # validation: g=0 case has an exact analytic ground state
-    psi0, E_history = imaginary_time_evolution(
-        psi_guess, k, V, 0.0, dx, N_particles, dtau, N_steps
+    # validation: g=0 case E=N/2
+    psi0, E_history_g0 = imaginary_time_evolution(
+        psi_trial, k, V, 0.0, dx, N_particles, dtau, N_steps
     )
     analytic_gaussian = (
         jnp.sqrt(N_particles) * (1 / jnp.pi**0.25) * jnp.exp(-(x**2) / 2)
     )
     error = float(jnp.max(jnp.abs(jnp.abs(psi0) - analytic_gaussian)))
     print(f"[validation]")
-    print(f"energy = {float(E_history[-1]):.6f}")
+    print(f"energy = {float(E_history_g0[-1]):.6f}")
     print(f"max|psi_numeric - psi_analytic| for g=0: {error:.2e}")
+
+    # plot ground state density
+    fig, ax = plt.subplots(figsize=(8, 6))
+    density = np.array(psi_ground.real**2 + psi_ground.imag**2)
+    ax.plot(np.array(x), density, color="b", lw=1.8, label=r"Numerical $|\Psi_0|^2$")
+    ax.set_xlabel("x")
+    ax.set_ylabel(r"$|\Psi|^2$")
+    ax.set_title(f"Ground state (N={N_particles}, g={g})")
+    # ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig("gpe_1D_gs.png", dpi=300)
+
+    # plot imaginary-time energy convergence
+    ax.clear()
+    ax.plot(np.array(E_history), color="b", lw=1.8, label=r"Energy $E$")
+    ax.set_xlabel("imaginary-time step")
+    ax.set_ylabel(r"$E$")
+    ax.set_title(f"Convergence to ground state (N={N_particles}, g={g})")
+    # ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig("gpe_1D_energy.png", dpi=300)
 
 
 if __name__ == "__main__":
