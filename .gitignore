@@ -229,3 +229,5 @@ test.py
 *.svg
 *.pdf
 *.bmp
+
+*.html
