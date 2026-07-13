@@ -35,8 +35,7 @@ def make_grid_3d(
     tuple[Array, Array, Array], tuple[Array, Array, Array], tuple[float, float, float]
 ]:
     """
-    Uniform grid on [-L/2, L/2) in each direction
-    and the matching FFT angular wavenumbers
+    Grid on [-L/2, L/2)^3 and the matching FFT angular wavenumbers
     """
     dx = Lx / Nx
     dy = Ly / Ny
@@ -53,7 +52,7 @@ def make_grid_3d(
     return (x, y, z), (kx, ky, kz), (dx, dy, dz)
 
 
-# k² Grid
+# k^2 Grid
 def k_squared_grids(kx: Array, ky: Array, kz: Array, Nz: int) -> tuple[Array, Array]:
     """
     Builds k^2 = kx^2 + ky^2 + kz^2 on the two spectra needed
@@ -235,39 +234,35 @@ def main() -> None:
     fig.tight_layout()
     fig.savefig("gpe_3D_convergence.png", dpi=300)
 
-
-
     # --- 3D Plotting with Plotly ---
     import plotly.graph_objects as go
 
     density = np.array(psi_ground**2)
-    
+
     X_dense, Y_dense, Z_dense = np.meshgrid(
         np.array(x), np.array(y), np.array(z), indexing="ij"
     )
 
     # Plotly requires flattened 1D arrays for volumetric data
-    fig = go.Figure(data=go.Volume(
-        x=X_dense.flatten(),
-        y=Y_dense.flatten(),
-        z=Z_dense.flatten(),
-        value=density.flatten(),
-        isomin=0.05 * np.max(density), # Hide outer empty space
-        isomax=np.max(density),
-        opacity=0.2,                   # Make layers transparent
-        surface_count=20,              # Number of nested layers
-        colorscale="magma"
-    ))
-
-    fig.update_layout(
-        title=f"3D BEC Probability Density (N={N_particles}, g={g})",
-        scene=dict(
-            xaxis_title='X',
-            yaxis_title='Y',
-            zaxis_title='Z'
+    fig = go.Figure(
+        data=go.Volume(
+            x=X_dense.flatten(),
+            y=Y_dense.flatten(),
+            z=Z_dense.flatten(),
+            value=density.flatten(),
+            isomin=0.05 * np.max(density),
+            isomax=np.max(density),
+            opacity=0.15,  # Make layers transparent
+            surface_count=20,  # Number of nested layers
+            colorscale="magma",
         )
     )
-    
+
+    fig.update_layout(
+        title=f"3D BEC Particle Density (N={N_particles}, g={g})",
+        scene=dict(xaxis_title="X", yaxis_title="Y", zaxis_title="Z"),
+    )
+
     fig.write_html("gpe_3D_density.html")
 
 
